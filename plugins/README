@@ -1,0 +1,14 @@
+MUNIN-NODE-WIN32-CYGWIN
+
+Copyright (c) 2015 John Vinopal
+Licensed under the MIT license.
+
+2015-04-02
+
+Cygwin x86-64 does not have perl-libwin32 ported and thus many of the plugins
+will not work.  Until this is ported, use Cygwin x86-32.
+
+Note that when fetching Win32_PerfRawData_PerfOS_Processor, the property
+PercentProcessorTime is the same as PercentIdleTime.  This must be a bug.
+To get the actual processor time, use 1-PercentProcessorTime
+

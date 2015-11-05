@@ -1,0 +1,103 @@
+#!/usr/bin/perl
+# /*
+#  * smart - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use Data::Dumper;
+
+#
+# Munin plugin to monitor smart status.
+#
+# Parameters:
+#       config
+#       autoconf
+#
+# Requirements:
+#	Cygwin, perl, and smartmontools package
+#
+
+# Cygwin smartctl from smartmontools
+my $SMART_COMMAND = "/usr/sbin/smartctl.exe";
+my $SMART_ARGS    = "-a";
+my $SMART_DRIVE   = "/dev/sda";
+
+my $SMART_EXIT_STATUS_KEY = "smartctl_exit_status";
+my $SMART_ATTRIBUTES_KEY  = "smart_attributes";
+
+my $REPORT_WARNINGS = 1;
+
+# Munin Configuration
+
+my $values = readSmartValues();
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        if ( -e $SMART_COMMAND ) {
+            print "yes\n";
+        }
+        else {
+            print "no ($SMART_COMMAND doesn't exist; smartmontools not installed?)\n";
+        }
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category disk\n";
+        print "graph_title S.M.A.R.T attributes for $SMART_DRIVE\n";
+        print "graph_args --base 1000 --lower-limit 0\n";
+        print "graph_vlabel Attribute value\n";
+
+        foreach my $key ( @{ $values->{$SMART_ATTRIBUTES_KEY} } ) {
+            print "$key.label $key\n";
+            print "$key.critical $values->{$key}->{threshold}:\n" if ($REPORT_WARNINGS);
+        }
+        print "$SMART_EXIT_STATUS_KEY.label SMARTCTL Exit Status\n";
+	print "$SMART_EXIT_STATUS_KEY.warning 1\n" if ($REPORT_WARNINGS);
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+foreach my $key ( @{ $values->{$SMART_ATTRIBUTES_KEY} } ) {
+    print "$key.value $values->{$key}->{value}\n";
+}
+print
+  "$SMART_EXIT_STATUS_KEY.value $values->{$SMART_EXIT_STATUS_KEY}->{value}\n";
+exit 0;
+
+sub readSmartValues {
+    my @smart_keys;
+    my %smart_values;
+
+    my $data     = `$SMART_COMMAND $SMART_ARGS $SMART_DRIVE`;
+    my $exitCode = $? / 256;
+    $smart_values{$SMART_EXIT_STATUS_KEY} =
+      { 'value' => $exitCode, 'threshold' => 1 };
+
+    #for (my $bit = 0, my $mask = 1; $bit < 8; $bit++, $mask <<= 1) {
+    #    print "Bit $bit: ", (($exitCode & $mask) && 1), "\n";
+    #}
+    my ($model) = $data =~ /^Device Model:\s+(.*)$/m;
+    $smart_values{'model'} = $model;
+
+#Vendor Specific SMART Attributes with Thresholds:
+#ID# ATTRIBUTE_NAME          FLAG     VALUE WORST THRESH TYPE      UPDATED  WHEN_FAILED RAW_VALUE
+#  1 Raw_Read_Error_Rate     0x000f   108   099   006    Pre-fail  Always       -       17144509
+    my $smart_re = '\s*(\d+)\s+(\S+)\s+\w+\s+(\d+)\s+\d+\s+([-\d]+)';
+    while ( $data =~ /^$smart_re/mg ) {
+        my ( $id, $name, $value, $thresh ) = ( $1, $2, $3, $4 );
+        $name =~ s/-/_/g;
+        $smart_values{$name} = { 'value' => $value, 'threshold' => $thresh };
+        push( @smart_keys, $name );
+    }
+    $smart_values{$SMART_ATTRIBUTES_KEY} = \@smart_keys;
+
+    #print Dumper \%smart_values;
+    return \%smart_values;
+}

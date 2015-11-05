@@ -1,0 +1,79 @@
+#!/usr/bin/perl
+# /*
+#  * memory - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use Win32Helper;
+
+#
+# Munin plugin to monitor memory statistics.
+#
+# Parameters:
+#       config
+#       autoconf
+#
+# Requirements:
+#	Cygwin, perl, and perl-libwin32 package or equivalent
+#
+
+# Performance Data from Win32 OperatingSystem class.
+# https://msdn.microsoft.com/en-us/library/aa394239(v=vs.85).aspx
+my $win32Namespace = 'winmgmts://./root/cimv2';
+my $win32Class     = 'Win32_OperatingSystem';
+my @win32Props = qw(TotalVisibleMemorySize FreePhysicalMemory SizeStoredInPagingFiles FreeSpaceInPagingFiles);
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        print "yes\n";
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category system\n";
+        print "graph_title Memory usage\n";
+        print "graph_args --base 1024 --lower-limit 0\n";
+        print "graph_vlabel Bytes\n";
+        print "graph_info This graph shows memory usage on the machine.\n";
+        print "graph_order memused memfree swapused swapfree\n";
+
+        print "memused.label Used\n";
+        print "memused.draw AREA\n";
+        print "memfree.label Free\n";
+        print "memfree.draw STACK\n";
+        print "swapused.label Swap\n";
+        print "swapused.draw STACK\n";
+        print "swapfree.label Free Swap\n";
+        print "swapfree.draw STACK\n";
+        print "swapfree.graph no\n";
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+my $values     = fetchMemoryValues();
+my ($computer) = keys %$values;
+# returned values in kb
+my $total_mem  = $values->{$computer}->{TotalVisibleMemorySize};
+my $free_mem   = $values->{$computer}->{FreePhysicalMemory};
+my $total_swap = $values->{$computer}->{SizeStoredInPagingFiles};
+my $free_swap  = $values->{$computer}->{FreeSpaceInPagingFiles};
+
+# Emit values in bytes.
+printf "memused.value %d\n", 1024 * ( $total_mem - $free_mem );
+printf "memfree.value %d\n", 1024 * $free_mem;
+printf "swapused.value %d\n", 1024 * ( $total_swap - $free_swap );
+printf "swapfree.value %d\n", 1024 * $free_swap;
+exit 0;
+
+# Return memory counters.
+sub fetchMemoryValues {
+    return getWin32Props( $win32Namespace, $win32Class, @win32Props );
+}

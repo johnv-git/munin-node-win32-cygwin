@@ -1,0 +1,84 @@
+#!/usr/bin/perl 
+# /*
+#  * df - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+#
+# Munin plugin to monitor disk usage.
+#
+# Parameters:
+#       config
+#       autoconf
+#
+# Requirements:
+#	Cygwin, perl, and Cygwin coreutils package
+#
+
+# Alert levels
+our $WARNING  = 90;
+our $CRITICAL = 95;
+
+# Cygwin df utility from coreutils.
+my $DF_COMMAND = '/usr/bin/df';
+my $DF_OPTS    = '-l -x udf';
+
+# Hash of "C" => "38" where value is % used.
+my %df = fetchDriveData();
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        if ( -e $DF_COMMAND ) {
+            print "yes\n";
+        }
+        else {
+            print "no ($DF_COMMAND doesn't exist; missing coreutils?)\n";
+        }
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category disk\n";
+        print "graph_title Disk usage in percent\n";
+        print "graph_args --lower-limit 0 --upper-limit 100\n";
+        print "graph_vlabel %\n";
+        print "graph_scale no\n";
+        print "graph_info This graph shows disk usage on the machine.\n";
+        foreach my $drive ( sort keys %df ) {
+            print "$drive.label $drive:\n";
+            print "$drive.warning $WARNING\n";
+            print "$drive.critical $CRITICAL\n";
+        }
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+foreach my $drive ( sort keys %df ) {
+    print "$drive.value $df{$drive}\n";
+}
+exit 0;
+
+# Return hash of "C" => "38", where value is % used.
+sub fetchDriveData {
+    my $data = `$DF_COMMAND $DF_OPTS`;
+
+    #$ /usr/bin/df -l
+    #Filesystem     1K-blocks      Used Available Use% Mounted on
+    #C:             471298044 177210720 294087324  38% /cygdrive/c
+    #D:              16777212  14357264   2419948  86% /cygdrive/d
+    #E:                101400     10900     90500  11% /cygdrive/e
+
+    my %df = ();
+    while ( $data =~ /^([A-Z]):.*?\s+(\d+)%/mg ) {
+        $df{$1} = $2;
+    }
+    return %df;
+}

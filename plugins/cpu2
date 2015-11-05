@@ -1,0 +1,105 @@
+#!/usr/bin/perl
+# /*
+#  * cpu2 - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use Win32Helper;
+use Data::Dumper;
+#
+# Munin plugin to monitor aggregate cpu statistics.
+#
+# Parameters:
+#	config
+#	autoconf
+#
+# Requirements:
+#	Cygwin, perl, and perl-libwin32 package or equivalent
+#
+
+# Performance Data from Win32 performance counter class.
+# https://msdn.microsoft.com/en-us/library/aa394271(v=vs.85).aspx
+my $win32Namespace = 'winmgmts://./root/cimv2';
+my $win32Class     = 'Win32_PerfFormattedData_PerfOS_Processor';
+my @win32Props =
+  qw(PercentIdleTime PercentProcessorTime PercentPrivilegedTime PercentUserTime PercentInterruptTime);
+
+# Define Fields and Output Data
+my @graph_order  = qw(user priv cpu int);
+my %graph_fields = (
+    'user' => {
+        win32_prop => 'PercentUserTime',
+        label      => 'user',
+        info => 'Percentage of non-idle processor time spent in user mode.',
+        draw => 'AREASTACK',
+    },
+    'priv' => {
+        win32_prop => 'PercentPrivilegedTime',
+        label      => 'privileged',
+        info =>
+          'Percentage of non-idle processor time spent in privileged mode.',
+        draw => 'AREASTACK',
+    },
+    'cpu' => {
+        win32_prop => 'PercentProcessorTime',
+        label      => 'total',
+        info =>
+'Percentage of time that the processor is executing a non-idle thread.',
+        draw => 'LINE1',
+    },
+    'int' => {
+        win32_prop => 'PercentInterruptTime',
+        label      => 'interrupt',
+        info =>
+'Percentage of time that the processor spent receiving and servicing hardware interrupts during the sample interval.',
+        draw => 'LINE1',
+    },
+);
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        print "yes\n";
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category system\n";
+        print "graph_title Cpu usage in percent (fmt)\n";
+        print "graph_args --lower-limit 0 --upper-limit 100\n";
+        print "graph_vlabel %\n";
+        print "graph_scale no\n";
+        print "graph_info This graph shows aggregate cpu usage on the machine.\n";
+        print "graph_order @graph_order\n";
+
+        foreach my $field (@graph_order) {
+            print "$field.label $graph_fields{$field}->{label}\n";
+            print "$field.draw $graph_fields{$field}->{draw}\n";
+            print "$field.info $graph_fields{$field}->{info}\n";
+        }
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+my $values = fetchCpuValues();
+
+#print Dumper $values;
+my $cpu = '_Total';
+foreach my $field (@graph_order) {
+    my $win32Prop = $graph_fields{$field}->{win32_prop};
+    printf "%s.value %.2f\n", $field, $values->{$cpu}->{$win32Prop};
+}
+exit 0;
+
+# Return cpu performance counters.
+sub fetchCpuValues {
+    my $values = getWin32Props( $win32Namespace, $win32Class, @win32Props );
+    return $values;
+}
