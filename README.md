@@ -32,7 +32,7 @@ Because the `Win32:OLE` module is not available pre-compiled, you will also need
 ### Install Cygwin x86_64
 
 * Download Cygwin setup-x86_64.exe
-** http://cygwin.org/setup-x86_64.exe
+  * http://cygwin.org/setup-x86_64.exe
 * Run and install to c:\cygwin64
 
 ### Install Cygwin packages
@@ -50,11 +50,11 @@ Because the `Win32:OLE` module is not available pre-compiled, you will also need
 
 * $ cpan
 * cpan> install Win32::OLE
-** will die with an error
+  * will die with an error
 * cpan> look Win32::OLE
 * $ vi OLE.xs
-** On line 483 change stricmp to strcasecmp
-** Save changes
+  * On line 483 change stricmp to strcasecmp
+  * Save changes
 * $ make
 * $ make install
 * $ exit shell
