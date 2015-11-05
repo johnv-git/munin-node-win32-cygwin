@@ -1,0 +1,96 @@
+#!/usr/bin/perl
+# /*
+#  * disk3 - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use Win32Helper;
+
+#
+# Munin plugin to monitor aggregate disk statistics.
+#
+# Parameters:
+#	config
+#	autoconf
+#
+# Requirements:
+#	Cygwin, perl, and perl-libwin32 package or equivalent
+#
+
+# Performance Data from Win32 performance counter class.
+# https://msdn.microsoft.com/en-us/library/aa394262(v=vs.85).aspx
+my $win32Namespace = 'winmgmts://./root/cimv2';
+my $win32Class     = 'Win32_PerfFormattedData_PerfDisk_PhysicalDisk';
+my @win32Props =
+  qw(PercentDiskTime PercentIdleTime PercentDiskReadTime PercentDiskWriteTime);
+
+# Define Fields and Output Data
+my @graph_order  = qw(read write busy);
+my %graph_fields = (
+    "write" => {
+        win32_prop => "PercentDiskWriteTime",
+        label      => "disk write",
+        info =>
+"Percentage of elapsed time that the selected disk drive is busy servicing write requests.",
+        draw => "AREASTACK",
+    },
+    "read" => {
+        win32_prop => "PercentDiskReadTime",
+        label      => "disk read",
+        info =>
+"Percentage of elapsed time that the selected disk drive is busy servicing read requests.",
+        draw => "AREASTACK",
+    },
+    "busy" => {
+        win32_prop => "PercentDiskTime",
+        label      => "disk busy",
+        info =>
+"Percentage of elapsed time that the selected disk drive is busy servicing read or write requests.",
+        draw => "LINE1",
+    },
+);
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        print "yes\n";
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category disk\n";
+        print "graph_title Disk usage in percent (phys)\n";
+        print "graph_args --lower-limit 0 --upper-limit 100\n";
+        print "graph_vlabel %\n";
+        print "graph_scale no\n";
+        print "graph_info This graph shows aggregate disk usage on the machine.\n";
+        print "graph_order @graph_order\n";
+
+        foreach my $field (@graph_order) {
+            print "$field.label $graph_fields{$field}->{label}\n";
+            print "$field.draw $graph_fields{$field}->{draw}\n";
+            print "$field.info $graph_fields{$field}->{info}\n";
+        }
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+my $values = fetchDiskValues();
+my $disk   = '_Total';
+foreach my $field (@graph_order) {
+    my $win32Prop = $graph_fields{$field}->{win32_prop};
+    printf "%s.value %.2f\n", $field, $values->{$disk}->{$win32Prop};
+}
+exit 0;
+
+# Return disk performance counters.
+sub fetchDiskValues {
+    return getWin32Props( $win32Namespace, $win32Class, @win32Props );
+}

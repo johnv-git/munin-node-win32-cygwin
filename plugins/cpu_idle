@@ -1,0 +1,109 @@
+#!/usr/bin/perl
+# /*
+#  * cpu_idle - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use Win32Helper;
+
+#
+# Munin plugin to monitor aggregate cpu idle states.
+#
+# Parameters:
+#	config
+#	autoconf
+#
+# Requirements:
+#	Cygwin, perl, and perl-libwin32 package or equivalent
+#
+
+# Performance Data from Win32 performance counter class.
+# https://msdn.microsoft.com/en-us/library/aa394317(v=vs.85).aspx
+my $win32Namespace = 'winmgmts://./root/cimv2';
+my $win32Class     = 'Win32_PerfRawData_PerfOS_Processor';
+my @win32Props = qw(PercentIdleTime PercentC1Time PercentC2Time PercentC3Time);
+
+# Define Fields and Output Data
+my @graph_order  = qw(c1 c2 c3 idle);
+my %graph_fields = (
+    "c1" => {
+        win32_prop => "PercentC1Time",
+        label      => "C1 state",
+        info =>
+"Percentage of idle processor time spent in the C1 lower-power idle state.",
+        draw => "AREASTACK",
+    },
+    "c2" => {
+        win32_prop => "PercentC2Time",
+        label      => "C2 state",
+        info =>
+"Percentage of idle processor time spent in the C2 lower-power idle state.",
+        draw => "AREASTACK",
+    },
+    "c3" => {
+        win32_prop => "PercentC3Time",
+        label      => "C3 state",
+        info =>
+"Percentage of idle processor time spent in the C3 lower-power idle state.",
+        draw => "AREASTACK",
+    },
+    "idle" => {
+        win32_prop => "PercentIdleTime",
+        label      => "Idle",
+        info       => "Idle processor time.",
+        draw       => "LINE1",
+    },
+);
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        print "yes\n";
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category system\n";
+        print "graph_title Cpu low-power idle time in percent\n";
+        print "graph_args --lower-limit 0 --upper-limit 100\n";
+        print "graph_vlabel %\n";
+        print "graph_scale no\n";
+        print "graph_info This graph shows aggregate low-power idle time on the machine.\n";
+        print "graph_order @graph_order\n";
+
+        foreach my $field (@graph_order) {
+            print "$field.label $graph_fields{$field}->{label}\n";
+            print "$field.draw $graph_fields{$field}->{draw}\n";
+            print "$field.info $graph_fields{$field}->{info}\n";
+        }
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+my $values = fetchCpuValues();
+my $cpu    = '_Total';
+foreach my $field (@graph_order) {
+    my $win32Prop = $graph_fields{$field}->{win32_prop};
+    printf "%s.value %.2f\n", $field, $values->{$cpu}->{$win32Prop};
+}
+exit 0;
+
+# Return cpu performance counters.
+sub fetchCpuValues {
+
+    #$win32Class = 'Win32_PerfFormattedData_PerfOS_Processor';
+    my $values = getRawWin32Props( $win32Namespace, $win32Class, @win32Props );
+
+# PercentProcessorTime is wrong; it returns the same as idle time on Windows 7.
+#foreach my $cpu (keys %$values) {
+#    $values->{$cpu}->{PercentProcessorTime} = 100 - $values->{$cpu}->{PercentProcessorTime};
+#}
+    return $values;
+}

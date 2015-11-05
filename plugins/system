@@ -1,0 +1,93 @@
+#!/usr/bin/perl
+# /*
+#  * system - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use Win32Helper;
+use Data::Dumper;
+
+# Munin plugin to monitor aggregate system statistics.
+#
+# Parameters:
+#	config
+#	autoconf
+#
+# Requirements:
+#	Cygwin, perl, and perl-libwin32 package or equivalent
+#
+
+# Performance Data from Win32 performance counter class.
+# https://msdn.microsoft.com/en-us/library/aa394272(v=vs.85).aspx
+my $win32Namespace = 'winmgmts://./root/cimv2';
+my $win32Class     = 'Win32_PerfFormattedData_PerfOS_System';
+my @win32Props =
+  qw(FileReadBytesPerSec FileWriteBytesPerSec FileControlBytesPerSec);
+
+# Define Fields and Output Data
+my @graph_order  = qw(rbytes wbytes cbytes);
+my %graph_fields = (
+    "rbytes" => {
+        win32_prop => "FileReadBytesPerSec",
+        label      => "File Read",
+        info       => "Disk bytes read.",
+        draw       => "LINE1",
+    },
+    "wbytes" => {
+        win32_prop => "FileWriteBytesPerSec",
+        label      => "File Write",
+        info       => "Disk bytes write.",
+        draw       => "LINE1",
+    },
+    "cbytes" => {
+        win32_prop => "FileControlBytesPerSec",
+        label      => "File Control",
+        info       => "Disk bytes neither read nor write.",
+        draw       => "LINE1",
+    },
+);
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        print "yes\n";
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category system\n";
+        print "graph_title System file i/o usage\n";
+        print "graph_args --base 1024 --lower-limit 0\n";
+        print "graph_vlabel bps\n";
+        print "graph_info This graph shows file i/o usage on the machine.\n";
+        print "graph_order @graph_order\n";
+
+        foreach my $field (@graph_order) {
+            print "$field.label $graph_fields{$field}->{label}\n";
+            print "$field.draw $graph_fields{$field}->{draw}\n";
+            print "$field.info $graph_fields{$field}->{info}\n";
+        }
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+my $values = fetchSystemValues();
+
+#print Dumper $values;
+foreach my $field (@graph_order) {
+    my $win32Prop = $graph_fields{$field}->{win32_prop};
+    printf "%s.value %.2f\n", $field, $values->{$win32Prop};
+}
+exit 0;
+
+# Return disk performance counters.
+sub fetchSystemValues {
+    return getWin32Props( $win32Namespace, $win32Class, @win32Props );
+}

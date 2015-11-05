@@ -1,0 +1,113 @@
+#!/usr/bin/perl
+# /*
+#  * memory2 - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use Win32Helper;
+use Data::Dumper;
+
+#
+# Munin plugin to monitor memory statistics.
+#
+# Parameters:
+#       config
+#       autoconf
+#
+# Requirements:
+#	Cygwin, perl, and perl-libwin32 package or equivalent
+#
+
+# Performance Data from Win32 OperatingSystem class.
+# https://msdn.microsoft.com/en-us/library/aa394239(v=vs.85).aspx
+my $win32Namespace = 'winmgmts://./root/cimv2';
+my $win32OSClass     = 'Win32_OperatingSystem';
+my @win32OSProps = qw(TotalVisibleMemorySize FreePhysicalMemory);
+
+my $win32MemClass  = 'Win32_PerfFormattedData_PerfOS_Memory';
+my @win32MemProps  = qw(AvailableBytes CacheBytes CommittedBytes PoolNonpagedBytes PoolPagedBytes StandbyCacheReserveBytes StandbyCacheNormalPriorityBytes ModifiedPageListBytes StandbyCacheCoreBytes);
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        print "yes\n";
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category system\n";
+        print "graph_title Memory usage\n";
+        print "graph_args --base 1024 --lower-limit 0\n";
+        print "graph_vlabel Bytes\n";
+        print "graph_info This graph shows memory usage on the machine.\n";
+        print "graph_order inuse modified standby free\n";
+
+        print "inuse.label In Use\n";
+        print "inuse.draw AREASTACK\n";
+        print "modified.label Modified\n";
+        print "modified.draw AREASTACK\n";
+        print "standby.label Standby\n";
+        print "standby.draw AREASTACK\n";
+        print "free.label Free\n";
+        print "free.draw AREASTACK\n";
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+my $values     = fetchMemoryValues();
+# XXXX
+exit 0;
+
+# Return memory counters.
+sub fetchMemoryValues {
+    my $osValues = getWin32Props( $win32Namespace, $win32OSClass, @win32OSProps );
+    my ($computer) = keys %$osValues;
+    my $totalBytes = 1024 * $osValues->{$computer}->{TotalVisibleMemorySize};
+    my $freeBytes = 1024 * $osValues->{$computer}->{FreePhysicalMemory};
+#print Dumper $osValues;
+    my $memValues = getWin32Props( $win32Namespace, $win32MemClass, @win32MemProps );
+    my $availBytes = $memValues->{AvailableBytes};
+    my $cacheBytes = $memValues->{CacheBytes};
+    my $commitBytes = $memValues->{CommittedBytes};
+    my $poolNonBytes = $memValues->{PoolNonpagedBytes};
+    my $poolBytes = $memValues->{PoolPagedBytes};
+#print Dumper $memValues;
+my $cache = $memValues->{StandbyCacheReserveBytes} + $memValues->{StandbyCacheNormalPriorityBytes} + $memValues->{StandbyCacheCoreBytes} + $memValues->{ModifiedPageListBytes};
+
+# Resource Monitor
+my $standby = $memValues->{StandbyCacheReserveBytes} + $memValues->{StandbyCacheNormalPriorityBytes} + $memValues->{StandbyCacheCoreBytes};
+my $modified = $memValues->{ModifiedPageListBytes};
+my $inuse = $totalBytes - $freeBytes - $modified;
+my $free = $availBytes - $standby;
+
+printf "inuse.value %d\n", $inuse;
+printf "modified.value %d\n", $modified;
+printf "standby.value %d\n", $standby;
+printf "free.value %d\n", $free;
+return;
+
+printf "AVAIL: %d (standby + free)\n", $freeBytes / (1024*1024);
+printf "CACHE: %d\n", $cache / (1024*1024);
+printf "TOTAL: %d (total)\n", $totalBytes / (1024*1024);
+print "\n";
+printf "inuse.value %d\n", $inuse / (1024*1024);
+printf "modified.value %d\n", $modified / (1024*1024);
+printf "standby.value %d\n", $standby / (1024*1024);
+printf "free.value %d\n", $free / (1024*1024);
+
+print "\n";
+printf "AVAIL: %d (standby + free)\n", $availBytes / (1024*1024);
+print "\n";
+printf "Kernel NON: %d\n", $poolNonBytes / (1024*1024);
+printf "Kernel PAGED: %d\n", $poolBytes / (1024*1024);
+print "\n";
+printf "COMMIT: %d\n", $commitBytes / (1024*1024);
+
+}

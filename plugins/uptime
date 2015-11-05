@@ -1,0 +1,91 @@
+#!/usr/bin/perl
+# /*
+#  * uptime - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use v5.10;      # for (?<name>) regex tagging
+
+#
+# Munin plugin to monitor uptime.
+#
+# Parameters:
+#       config
+#       autoconf
+#
+# Requirements:
+#	Cygwin, perl, and procps package
+#
+
+# Cygwin uptime from procps package.
+my $UPTIME_COMMAND = '/usr/bin/uptime';
+my $UPTIME_OPTS    = '';
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        if ( -e $UPTIME_COMMAND ) {
+            print "yes\n";
+        }
+        else {
+            print "no ($UPTIME_COMMAND doesn't exist; procps not installed?)\n";
+        }
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category system\n";
+        print "graph_title Uptime\n";
+        print "graph_args --base 1000 --lower-limit 0\n";
+        print "graph_vlabel uptime in days\n";
+        print "graph_scale no\n";
+
+        print "uptime.label uptime\n";
+        print "uptime.draw AREA\n";
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+my $days = fetchUptimeData();
+print "uptime.value $days\n";
+exit 0;
+
+sub fetchUptimeData {
+    my $uptime = `$UPTIME_COMMAND $UPTIME_OPTS`;
+
+    # Uptime output is more complicated than it should be.
+    #$ uptime
+    # 17:33:41 up 7 days,  7:29,  1 user,  load average: 0.00, 0.00, 0.00
+    # 10:27:36 up 9 days, 23 min,  0 users,  load average: 0.00, 0.00, 0.00
+    # 11:04:33 up 9 days,  1:00,  0 users,  load average: 0.00, 0.00, 0.00
+    # Cygwin uptime doesn't do this, but some versions do.
+    # 10:04:32 up 9 days, 1 hr,  0 users,  load average: 0.00, 0.00, 0.00
+
+    my $days = 'U';
+    if ( $uptime =~ /^\s\d\d:\d\d:\d\d up\s+(?:(?<days>\d+)\s+days?,\s+)?(?<hours>\d+):(?<mins>\d+)/ )
+    {
+        $days = sprintf "%.03f", $+{days} + ( $+{hours} / 24 ) + ( $+{mins} / ( 24 * 60 ) );
+    }
+    elsif (
+        # Cygwin uptime doesn't do this, but some versions do.
+        # 10:04:32 up 9 days, 1 hr,  0 users,  load average: 0.00, 0.00, 0.00
+        $uptime =~ /^\s\d\d:\d\d:\d\d\sup\s+(?:(?<days>\d+)\s+days?,\s+)?(?<hours>\d+) hr/ )
+    {
+        $days = sprintf "%.03f", $+{days} + ( $+{hours} / 24 );
+    }
+    elsif (
+        # 10:27:36 up 9 days, 23 min,  0 users,  load average: 0.00, 0.00, 0.00
+        $uptime =~ /^\s\d\d:\d\d:\d\d\sup\s+(?:(?<days>\d+)\s+days?,\s+)?(?<mins>\d+) min/ )
+    {
+        $days = sprintf "%.03f", $+{days} + ( $+{mins} / ( 24 * 60 ) );
+    }
+
+    return $days;
+}

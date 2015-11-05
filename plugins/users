@@ -1,0 +1,61 @@
+#!/usr/bin/perl
+# /*
+#  * users - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use Win32Helper;
+
+#
+# Munin plugin to monitor user statistics.
+#
+# Parameters:
+#       config
+#       autoconf
+#
+# Requirements:
+#	Cygwin, perl, and perl-libwin32 package or equivalent
+#
+
+# Performance Data from Win32 OperatingSystem class.
+# https://msdn.microsoft.com/en-us/library/aa394239(v=vs.85).aspx
+my $win32Namespace = 'winmgmts://./root/cimv2';
+my $win32Class     = 'Win32_OperatingSystem';
+my @win32Props     = qw(NumberOfUsers);
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        print "yes\n";
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category system\n";
+        print "graph_title User sessions\n";
+        print "graph_args --base 1000 --lower-limit 0\n";
+        print "graph_vlabel Bytes\n";
+        print "graph_info Number of user sessions for which the operating system is storing state information currently.\n";
+
+        print "users.label User sessions\n";
+	print "users.info Number of user sessions\n";
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+my $values     = fetchWin32Values();
+my ($computer) = keys %$values;
+printf "users.value %d\n", $values->{$computer}->{NumberOfUsers};
+exit 0;
+
+# Return user counter.
+sub fetchWin32Values {
+    return getWin32Props( $win32Namespace, $win32Class, @win32Props );
+}

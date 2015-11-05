@@ -1,0 +1,108 @@
+#!/usr/bin/perl
+# /*
+#  * processes - a plugin for munin-node-win32-cygwin
+#  *
+#  * Copyright (c) 2015 John Vinopal
+#  * Licensed under the MIT license.
+#  */
+use strict;
+use warnings;
+use Win32Helper;
+use Data::Dumper;
+
+# Munin plugin to monitor aggregate process statistics.
+#
+# Parameters:
+#	config
+#	autoconf
+#
+# Requirements:
+#	Cygwin, perl, and perl-libwin32 package or equivalent
+#
+
+# Performance Data from Win32 performance counter class.
+# https://msdn.microsoft.com/en-us/library/aa394269(v=vs.85).aspx
+my $win32Namespace = 'winmgmts://./root/cimv2';
+my $win32Class     = 'Win32_PerfFormattedData_PerfOS_Objects';
+my @win32Props     = qw(Events Mutexes Processes Sections Semaphores Threads);
+
+# Define Fields and Output Data
+my @graph_order  = qw(events mutexes processes sections semaphores threads);
+my %graph_fields = (
+    "events" => {
+        win32_prop => "Events",
+        label      => "events",
+        info       => "Number of events in the computer.",
+        draw       => "LINE1",
+    },
+    "mutexes" => {
+        win32_prop => "Mutexes",
+        label      => "mutexes",
+        info       => "Number of mutexes in the computer.",
+        draw       => "LINE1",
+    },
+    "processes" => {
+        win32_prop => "Processes",
+        label      => "processes",
+        info       => "Number of processes in the computer.",
+        draw       => "LINE1",
+    },
+    "sections" => {
+        win32_prop => "Sections",
+        label      => "sections",
+        info       => "Number of sections in the computer.",
+        draw       => "LINE1",
+    },
+    "semaphores" => {
+        win32_prop => "Semaphores",
+        label      => "semaphores",
+        info       => "Number of semaphores in the computer.",
+        draw       => "LINE1",
+    },
+    "threads" => {
+        win32_prop => "Threads",
+        label      => "threads",
+        info       => "Number of threads in the computer.",
+        draw       => "LINE1",
+    },
+);
+
+# Munin Configuration
+if (@ARGV) {
+    if ( $ARGV[0] eq 'autoconf' ) {
+        print "yes\n";
+        exit 0;
+    }
+    elsif ( $ARGV[0] eq 'config' ) {
+        print "graph_category system\n";
+        print "graph_title System process usage\n";
+        print "graph_args --base 1000 --logarithmic\n";
+        print "graph_vlabel #\n";
+        print "graph_info This graph shows process usage on the machine.\n";
+        print "graph_order @graph_order\n";
+
+        foreach my $field (@graph_order) {
+            print "$field.label $graph_fields{$field}->{label}\n";
+            print "$field.draw $graph_fields{$field}->{draw}\n";
+            print "$field.info $graph_fields{$field}->{info}\n";
+        }
+        exit 0;
+    }
+    else {
+        print "Unknown arg $ARGV[0]\n";
+        exit 1;
+    }
+}
+
+# Munin Data
+my $values = fetchProcessValues();
+foreach my $field (@graph_order) {
+    my $win32Prop = $graph_fields{$field}->{win32_prop};
+    printf "%s.value %.2f\n", $field, $values->{$win32Prop};
+}
+exit 0;
+
+# Return disk performance counters.
+sub fetchProcessValues {
+    return getWin32Props( $win32Namespace, $win32Class, @win32Props );
+}
